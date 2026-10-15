@@ -19,45 +19,50 @@ import {
   Lightbulb,
   ListChecks
 } from 'lucide-react';
-import { docs } from './content.js';
+import { docs as internalDocs } from './content.js';
+import { clientDocs } from './clientContent.js';
 import './styles.css';
-
-const groups = [...new Set(docs.map(d => d.group))];
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
 export default function App() {
-  const [active, setActive] = useState('intro');
+  const [activeAudience, setActiveAudience] = useState('internal');
+  const [activeInternalId, setActiveInternalId] = useState('intro');
+  const [activeClientId, setActiveClientId] = useState('client-intro');
   const [query, setQuery] = useState('');
   const [fold, setFold] = useState({});
   const [mobile, setMobile] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [activeAudience, setActiveAudience] = useState('internal');
   const [activeHeading, setActiveHeading] = useState('');
   const isClickScrolling = useRef(false);
   const clickTimeout = useRef(null);
 
-  const current = docs.find(d => d.id === active) || docs[0];
+  // Active dataset depending on selected audience
+  const currentDocs = activeAudience === 'client' ? clientDocs : internalDocs;
+  const activeId = activeAudience === 'client' ? activeClientId : activeInternalId;
+
+  const current = currentDocs.find(d => d.id === activeId) || currentDocs[0];
+  const groups = useMemo(() => [...new Set(currentDocs.map(d => d.group))], [currentDocs]);
 
   const filtered = useMemo(() => {
     return groups
       .map(g => ({
         g,
-        items: docs.filter(
+        items: currentDocs.filter(
           d =>
             d.group === g &&
             (!query ||
-              (d.title + ' ' + d.group + ' ' + JSON.stringify(d.blocks))
+              (d.title + ' ' + d.group + ' ' + (d.subtitle || '') + ' ' + JSON.stringify(d.blocks))
                 .toLowerCase()
                 .includes(query.toLowerCase()))
         )
       }))
       .filter(x => x.items.length);
-  }, [query]);
+  }, [groups, currentDocs, query]);
 
-  // Extract sections for TOC
+  // Extract sections for TOC from current document
   const tocSections = useMemo(() => {
     const list = [];
     current.blocks.forEach((b, idx) => {
@@ -70,9 +75,10 @@ export default function App() {
   }, [current]);
 
   useEffect(() => {
-    document.title = `${current.title} | B2C Token Enrichment Docs`;
+    const audiencePrefix = activeAudience === 'client' ? 'Client Docs' : 'Internal Docs';
+    document.title = `${current.title} | ${audiencePrefix} | B2C Token Enrichment`;
     window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [current]);
+  }, [current, activeAudience]);
 
   // Keyboard shortcut Ctrl+K / Cmd+K
   useEffect(() => {
@@ -132,7 +138,7 @@ export default function App() {
       clearTimeout(timer);
       if (clickTimeout.current) clearTimeout(clickTimeout.current);
     };
-  }, [active, tocSections]);
+  }, [activeId, tocSections]);
 
   const jumpToToc = (id) => {
     setActiveHeading(id);
@@ -147,9 +153,21 @@ export default function App() {
   };
 
   const go = (id) => {
-    setActive(id);
+    if (activeAudience === 'client') {
+      setActiveClientId(id);
+    } else {
+      setActiveInternalId(id);
+    }
     setMobile(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleAudienceSwitch = (aud) => {
+    if (aud === activeAudience) return;
+    setActiveAudience(aud);
+    setQuery('');
+    setMobile(false);
+    window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
   const copy = async () => {
@@ -161,9 +179,9 @@ export default function App() {
     } catch {}
   };
 
-  const currentIndex = docs.findIndex(d => d.id === current.id);
-  const previous = docs[currentIndex - 1];
-  const next = docs[currentIndex + 1];
+  const currentIndex = currentDocs.findIndex(d => d.id === current.id);
+  const previous = currentDocs[currentIndex - 1];
+  const next = currentDocs[currentIndex + 1];
 
   return (
     <div className="app-shell">
@@ -194,20 +212,21 @@ export default function App() {
           <strong>B2C Token Enrichment Docs</strong>
         </a>
 
+        {/* AUDIENCE TABS */}
         <nav className="audience-tabs" aria-label="Documentation audience">
           <button
             className={activeAudience === 'internal' ? 'audience-tab active' : 'audience-tab'}
-            onClick={() => setActiveAudience('internal')}
+            onClick={() => handleAudienceSwitch('internal')}
           >
             <span className="tab-dot blue" />
             Internal Docs
           </button>
           <button
             className={activeAudience === 'client' ? 'audience-tab active' : 'audience-tab'}
-            onClick={() => setActiveAudience('client')}
+            onClick={() => handleAudienceSwitch('client')}
           >
             <span className="tab-dot green" />
-            Common API Guide
+            Client Docs
           </button>
         </nav>
 
@@ -231,7 +250,7 @@ export default function App() {
       {query.trim() && (
         <div className="search-results-popover">
           <div className="search-results-title">
-            <Search size={15} /> Search results{' '}
+            <Search size={15} /> Search results ({activeAudience === 'client' ? 'Client' : 'Internal'}){' '}
             <span>{filtered.reduce((n, g) => n + g.items.length, 0)}</span>
           </div>
           <div className="search-results-list">
@@ -250,7 +269,7 @@ export default function App() {
               ))
             )}
             {!filtered.length && (
-              <div className="search-empty">No matching pages found.</div>
+              <div className="search-empty">No matching pages found in {activeAudience === 'client' ? 'Client Docs' : 'Internal Docs'}.</div>
             )}
           </div>
         </div>
@@ -272,7 +291,7 @@ export default function App() {
           <div className="sidebar-top">
             <div className="sidebar-heading">
               <BookOpen size={16} />
-              <span>Documentation</span>
+              <span>{activeAudience === 'client' ? 'Client Documentation' : 'Documentation'}</span>
             </div>
             <button className="sidebar-collapse" title="Navigation panel">
               <PanelLeftClose size={16} />
@@ -311,7 +330,7 @@ export default function App() {
                     {group.items.map(item => (
                       <button
                         key={item.id}
-                        className={`nav-item ${active === item.id ? 'selected' : ''}`}
+                        className={`nav-item ${activeId === item.id ? 'selected' : ''}`}
                         onClick={() => go(item.id)}
                         title={item.title}
                       >
@@ -331,7 +350,7 @@ export default function App() {
           <div className="sidebar-footer">
             <span className="footer-dot" />
             {activeAudience === 'client'
-              ? 'Common API guide'
+              ? 'Client integration guide'
               : 'Internal engineering guide'}
             <span className="footer-version">v1.0</span>
           </div>
@@ -343,14 +362,16 @@ export default function App() {
             <div className="breadcrumbs">
               <span>Docs</span>
               <ChevronRight size={14} />
-              <span>Azure AD B2C</span>
+              <span>{activeAudience === 'client' ? 'Client Integration' : 'Azure AD B2C'}</span>
               <ChevronRight size={14} />
               <span>{current.group.toUpperCase()}</span>
             </div>
 
             <div className="page-title-row">
               <div>
-                <span className="eyebrow">{current.group.toUpperCase()}</span>
+                <span className="eyebrow">
+                  {activeAudience === 'client' ? `CLIENT DOCS · ${current.group.toUpperCase()}` : current.group.toUpperCase()}
+                </span>
                 <h1>{current.title}</h1>
               </div>
               <button className="copy-page-button" onClick={copy}>
@@ -401,8 +422,8 @@ export default function App() {
               <span>
                 © iNextLabs ·{' '}
                 {activeAudience === 'client'
-                  ? 'Common API documentation'
-                  : 'Internal engineering documentation'}
+                  ? 'Client Integration Documentation'
+                  : 'Internal Engineering Documentation'}
               </span>
               <a
                 href="https://learn.microsoft.com/en-us/azure/active-directory-b2c/add-api-connector-token-enrichment"
@@ -528,9 +549,24 @@ function Blocks({ blocks }) {
         );
       }
       if (t === 'p') {
+        const text = v[0] || '';
+        const lines = text.split('\n');
         return (
           <p className="section-body" key={i}>
-            {v[0]}
+            {lines.map((line, lineIdx) => {
+              const parts = line.split(/(\*\*[^*]+\*\*)/g);
+              return (
+                <React.Fragment key={lineIdx}>
+                  {parts.map((part, pIdx) => {
+                    if (part.startsWith('**') && part.endsWith('**')) {
+                      return <strong key={pIdx}>{part.slice(2, -2)}</strong>;
+                    }
+                    return part;
+                  })}
+                  {lineIdx < lines.length - 1 && <br />}
+                </React.Fragment>
+              );
+            })}
           </p>
         );
       }
